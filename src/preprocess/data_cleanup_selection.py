@@ -23,8 +23,6 @@ print("Iniciando limpeza e integração dos dados do Dallas Mavericks 2024–25\
 print("\nProcessando jogos...")
 games_df = pd.read_csv(GAMES_CSV)
 
-# === Ajustes e transformações iniciais ===
-
 # Converter "confronto" em mando de quadra (1 = casa, 0 = fora)
 games_df["mando-de-jogo"] = games_df["confronto"].apply(lambda x: 1 if "vs." in str(x) else 0)
 
@@ -39,7 +37,7 @@ games_df.fillna(0, inplace=True)
 
 # === Selecionar colunas finais (mantendo consistência) ===
 colunas_games = [
-    "id-jogo", "data-jogo", "resultado", "mando-de-jogo",
+    "data-jogo", "resultado", "mando-de-jogo",
     "pontos", "saldo-pontos", "arremessos-convertidos", "arremessos-tentados",
     "porcentagem-arremessos", "triplos-convertidos", "triplos-tentados", "porcentagem-triplos",
     "lances-livres-convertidos", "lances-livres-tentados", "porcentagem-lances-livres",
@@ -85,7 +83,7 @@ roster_df["posicao-g-f-fc-cf-c"] = roster_df["posicao"].map(position_map).fillna
 
 # Selecionar colunas relevantes
 colunas_roster = [
-    "id-jogador", "sigla-time", "posicao-g-f-fc-cf-c", "altura-cm", "peso-kg", "idade"
+    "id-jogador", "posicao-g-f-fc-cf-c", "altura-cm", "peso-kg", "idade"
 ]
 colunas_roster = [c for c in colunas_roster if c in roster_df.columns]
 
@@ -138,6 +136,7 @@ if "id-jogador" in roster_clean.columns and "id-jogador" in players_media_clean.
         merged["pontos"] / merged["arremessos-tentados"]
     ).replace([float("inf"), -float("inf")], 0)
 
+    merged.drop(columns=["id-jogador"], inplace=True)
     # Já está "processado" e finalizado:
     merged.to_csv(PROCESSED_DIR / "dallas_players_2024-25.csv", index=False)
     print(f"Merge salvo: dal-players-merged.csv ({len(merged)} linhas)")
