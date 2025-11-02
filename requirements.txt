@@ -1,6 +1,6 @@
 nba-api==1.2.1
 pandas==2.3.3
-numpy==2.3.4
+numpy>=1.22.2,<2.0.0
 streamlit>=1.28.0
 matplotlib>=3.6.0
 seaborn>=0.12.0
