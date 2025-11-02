@@ -17,6 +17,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Inicializar session_state
+if 'run_regression' not in st.session_state:
+    st.session_state.run_regression = False
+
 st.title("🏀 Análise de Regressão Linear - Dallas Mavericks 2024-25")
 st.markdown("---")
 
@@ -174,7 +178,32 @@ if players_df is not None:
             st.sidebar.subheader("🔧 Parâmetros do Modelo")
             test_size = st.sidebar.slider("Tamanho do conjunto de teste (%)", 10, 50, 20) / 100
             
+            # Botão para limpar modelo treinado
+            if st.sidebar.button("🗑️ Limpar Modelo", help="Remove o modelo treinado para permitir novo treinamento"):
+                if 'trained_model' in st.session_state:
+                    del st.session_state.trained_model
+                if 'model_config_key' in st.session_state:
+                    del st.session_state.model_config_key
+                st.session_state.run_regression = False
+                st.rerun()
+            
+            # Verificar se há mudanças nas configurações que requerem novo treinamento
+            config_key = f"{dataset_choice}_{target_variable}_{str(sorted(selected_features))}_{test_size}_{selected_position if dataset_choice == 'Dados dos Jogadores' and 'posicao-g-f-fc-cf-c' in df.columns else 'all'}"
+            
+            # Mostrar status do modelo
+            if ('trained_model' in st.session_state and 
+                st.session_state.get('model_config_key', '') == config_key):
+                st.sidebar.success("✅ Modelo treinado disponível")
+            else:
+                st.sidebar.info("ℹ️ Clique em 'Executar Regressão' para treinar o modelo")
+            
             if st.sidebar.button("🚀 Executar Regressão Linear", type="primary"):
+                st.session_state.run_regression = True
+                st.session_state.config_key = config_key
+            
+            # Executar regressão se solicitado ou se já foi executada com a mesma configuração
+            if (st.session_state.get('run_regression', False) and 
+                st.session_state.get('config_key', '') == config_key):
                 
                 X = df[selected_features].dropna()
                 y = df.loc[X.index, target_variable]
@@ -182,7 +211,36 @@ if players_df is not None:
                 if len(X) == 0:
                     st.error("Não há dados válidos após remoção de valores nulos.")
                 else:
-                    model, X_train, X_test, y_train, y_test, y_pred_train, y_pred_test, metrics = run_linear_regression(X, y, test_size)
+                    # Treinar modelo apenas se necessário
+                    if (st.session_state.get('model_config_key', '') != config_key or 
+                        'trained_model' not in st.session_state):
+                        
+                        model, X_train, X_test, y_train, y_test, y_pred_train, y_pred_test, metrics = run_linear_regression(X, y, test_size)
+                        
+                        # Salvar no session_state
+                        st.session_state.trained_model = model
+                        st.session_state.X_train = X_train
+                        st.session_state.X_test = X_test
+                        st.session_state.y_train = y_train
+                        st.session_state.y_test = y_test
+                        st.session_state.y_pred_train = y_pred_train
+                        st.session_state.y_pred_test = y_pred_test
+                        st.session_state.metrics = metrics
+                        st.session_state.selected_features_model = selected_features
+                        st.session_state.target_variable_model = target_variable
+                        st.session_state.X_data = X
+                        st.session_state.model_config_key = config_key
+                    else:
+                        # Usar modelo já treinado
+                        model = st.session_state.trained_model
+                        X_train = st.session_state.X_train
+                        X_test = st.session_state.X_test
+                        y_train = st.session_state.y_train
+                        y_test = st.session_state.y_test
+                        y_pred_train = st.session_state.y_pred_train
+                        y_pred_test = st.session_state.y_pred_test
+                        metrics = st.session_state.metrics
+                        X = st.session_state.X_data
                     
                     st.markdown("---")
                     st.header("📊 Resultados da Regressão Linear")
@@ -302,33 +360,82 @@ if players_df is not None:
                     
                     st.subheader("🎯 Fazer Predições Personalizadas")
                     
-                    prediction_inputs = {}
-                    cols = st.columns(len(selected_features))
+                    # Usar as features do modelo treinado
+                    model_features = st.session_state.get('selected_features_model', selected_features)
                     
-                    for i, feature in enumerate(selected_features):
+                    prediction_inputs = {}
+                    cols = st.columns(len(model_features))
+                    
+                    for i, feature in enumerate(model_features):
                         with cols[i]:
                             min_val = float(X[feature].min())
                             max_val = float(X[feature].max())
                             mean_val = float(X[feature].mean())
                             
+                            # Usar uma key única para cada input para evitar conflitos
                             prediction_inputs[feature] = st.number_input(
                                 f"{feature}:",
                                 min_value=min_val,
                                 max_value=max_val,
                                 value=mean_val,
-                                step=(max_val - min_val) / 100
+                                step=(max_val - min_val) / 100,
+                                key=f"prediction_{feature}_{config_key}"
                             )
                     
-                    if st.button("🔮 Fazer Predição"):
+                    # Fazer predição automaticamente quando os valores mudam
+                    if prediction_inputs:
                         input_array = np.array([list(prediction_inputs.values())])
                         prediction = model.predict(input_array)[0]
                         
-                        st.success(f"**Predição para {target_variable}: {prediction:.4f}**")
+                        st.success(f"**Predição para {st.session_state.target_variable_model}: {prediction:.4f}**")
                         
                         residual_std = np.std(y_test - y_pred_test)
                         confidence_interval = 1.96 * residual_std  # 95% CI aproximado
                         
                         st.info(f"Intervalo de confiança aproximado (95%): [{prediction - confidence_interval:.4f}, {prediction + confidence_interval:.4f}]")
+            
+            # Seção de predições mesmo quando não há modelo recém treinado
+            elif 'trained_model' in st.session_state and st.session_state.get('selected_features_model'):
+                st.markdown("---")
+                st.subheader("🎯 Fazer Predições com Modelo Treinado")
+                st.info("💡 Use o modelo já treinado para fazer predições. Para ver todos os resultados, clique em 'Executar Regressão Linear' novamente.")
+                
+                model = st.session_state.trained_model
+                model_features = st.session_state.selected_features_model
+                X = st.session_state.X_data
+                y_test = st.session_state.y_test
+                y_pred_test = st.session_state.y_pred_test
+                
+                prediction_inputs = {}
+                cols = st.columns(len(model_features))
+                
+                for i, feature in enumerate(model_features):
+                    with cols[i]:
+                        min_val = float(X[feature].min())
+                        max_val = float(X[feature].max())
+                        mean_val = float(X[feature].mean())
+                        
+                        # Usar uma key única para cada input
+                        prediction_inputs[feature] = st.number_input(
+                            f"{feature}:",
+                            min_value=min_val,
+                            max_value=max_val,
+                            value=mean_val,
+                            step=(max_val - min_val) / 100,
+                            key=f"simple_prediction_{feature}"
+                        )
+                
+                # Fazer predição automaticamente
+                if prediction_inputs and len(prediction_inputs) == len(model_features):
+                    input_array = np.array([list(prediction_inputs.values())])
+                    prediction = model.predict(input_array)[0]
+                    
+                    st.success(f"**Predição para {st.session_state.target_variable_model}: {prediction:.4f}**")
+                    
+                    residual_std = np.std(y_test - y_pred_test)
+                    confidence_interval = 1.96 * residual_std
+                    
+                    st.info(f"Intervalo de confiança aproximado (95%): [{prediction - confidence_interval:.4f}, {prediction + confidence_interval:.4f}]")
     
     if st.checkbox("📋 Mostrar dados brutos"):
         st.subheader("Dados Brutos")
