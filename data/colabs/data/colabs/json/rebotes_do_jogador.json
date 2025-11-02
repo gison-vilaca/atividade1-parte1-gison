@@ -1,0 +1,39 @@
+{
+    "nome_do_modelo": "Rebotes do Jogador",
+    "variavel_dependente": "rebotes_totais",
+    "R_squared": 0.981,
+    "Adj_R_squared": 0.975,
+    "F_Prob": 3.19e-10,
+    "equacao_coeficientes": [
+        {
+            "variavel": "Intercept",
+            "coeficiente": -6.6446,
+            "p_valor": 0.0686,
+            "significativo": false
+        },
+        {
+            "variavel": "rebotes_defensivos",
+            "coeficiente": 0.9934,
+            "p_valor": 0.0,
+            "significativo": true
+        },
+        {
+            "variavel": "tocos",
+            "coeficiente": 0.4681,
+            "p_valor": 0.2262,
+            "significativo": false
+        },
+        {
+            "variavel": "altura_cm",
+            "coeficiente": 0.0326,
+            "p_valor": 0.079,
+            "significativo": false
+        },
+        {
+            "variavel": "faltas",
+            "coeficiente": 0.5475,
+            "p_valor": 0.0385,
+            "significativo": true
+        }
+    ]
+}

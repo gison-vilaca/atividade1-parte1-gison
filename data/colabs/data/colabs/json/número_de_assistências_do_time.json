@@ -1,0 +1,39 @@
+{
+    "nome_do_modelo": "Número de Assistências do Time",
+    "variavel_dependente": "assistencias",
+    "R_squared": 0.429,
+    "Adj_R_squared": 0.401,
+    "F_Prob": 1.52e-09,
+    "equacao_coeficientes": [
+        {
+            "variavel": "Intercept",
+            "coeficiente": -4.6006,
+            "p_valor": 0.3323,
+            "significativo": false
+        },
+        {
+            "variavel": "arremessos_convertidos",
+            "coeficiente": 0.5983,
+            "p_valor": 0.0,
+            "significativo": true
+        },
+        {
+            "variavel": "rebotes_defensivos",
+            "coeficiente": 0.0882,
+            "p_valor": 0.2956,
+            "significativo": false
+        },
+        {
+            "variavel": "erros",
+            "coeficiente": -0.0404,
+            "p_valor": 0.6912,
+            "significativo": false
+        },
+        {
+            "variavel": "roubos",
+            "coeficiente": 0.3029,
+            "p_valor": 0.0373,
+            "significativo": true
+        }
+    ]
+}

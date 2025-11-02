@@ -1,0 +1,39 @@
+{
+    "nome_do_modelo": "Pontos do Jogador",
+    "variavel_dependente": "pontos",
+    "R_squared": 0.882,
+    "Adj_R_squared": 0.842,
+    "F_Prob": 1.73e-05,
+    "equacao_coeficientes": [
+        {
+            "variavel": "Intercept",
+            "coeficiente": -2.1772,
+            "p_valor": 0.2649,
+            "significativo": false
+        },
+        {
+            "variavel": "minutos",
+            "coeficiente": 0.3309,
+            "p_valor": 0.0438,
+            "significativo": true
+        },
+        {
+            "variavel": "lances_livres_convertidos",
+            "coeficiente": 2.6777,
+            "p_valor": 0.0558,
+            "significativo": false
+        },
+        {
+            "variavel": "assistencias",
+            "coeficiente": -0.4452,
+            "p_valor": 0.6192,
+            "significativo": false
+        },
+        {
+            "variavel": "erros",
+            "coeficiente": 1.6121,
+            "p_valor": 0.5005,
+            "significativo": false
+        }
+    ]
+}

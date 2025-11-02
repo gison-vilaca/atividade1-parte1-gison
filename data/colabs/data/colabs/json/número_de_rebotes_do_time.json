@@ -1,0 +1,33 @@
+{
+    "nome_do_modelo": "Número de Rebotes do time",
+    "variavel_dependente": "rebotes_totais",
+    "R_squared": 0.795,
+    "Adj_R_squared": 0.788,
+    "F_Prob": 7.48e-29,
+    "equacao_coeficientes": [
+        {
+            "variavel": "Intercept",
+            "coeficiente": -13.1654,
+            "p_valor": 0.0059,
+            "significativo": true
+        },
+        {
+            "variavel": "rebotes_defensivos",
+            "coeficiente": 1.1274,
+            "p_valor": 0.0,
+            "significativo": true
+        },
+        {
+            "variavel": "arremessos_tentados",
+            "coeficiente": 0.2024,
+            "p_valor": 0.0001,
+            "significativo": true
+        },
+        {
+            "variavel": "tocos",
+            "coeficiente": 0.2206,
+            "p_valor": 0.026,
+            "significativo": true
+        }
+    ]
+}
