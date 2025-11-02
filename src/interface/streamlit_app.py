@@ -404,7 +404,7 @@ def interactive_analysis(players_df, games_df):
     )
     
     positions = players_df['posicao-g-f-fc-cf-c'].unique()
-    position_names = {1: 'Guard', 2: 'Forward', 3: 'Center', 4: 'Forward-Center', 5: 'Center-Forward'}
+    position_names = {1: 'G', 2: 'F', 3: 'C', 4: 'FC', 5: 'CF'}
     selected_positions = st.sidebar.multiselect(
         "Posições",
         options=positions,
