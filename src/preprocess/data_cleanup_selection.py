@@ -83,7 +83,7 @@ roster_df["posicao-g-f-fc-cf-c"] = roster_df["posicao"].map(position_map).fillna
 
 # Selecionar colunas relevantes
 colunas_roster = [
-    "id-jogador", "posicao-g-f-fc-cf-c", "altura-cm", "peso-kg", "idade"
+    "id-jogador", "nome-jogador", "posicao-g-f-fc-cf-c", "altura-cm", "peso-kg", "idade"
 ]
 colunas_roster = [c for c in colunas_roster if c in roster_df.columns]
 
@@ -125,22 +125,39 @@ print(f"Estatísticas totais limpas: {len(players_total_clean)} linhas")
 
 
 # === 5 - Merge das estatísticas dos Jogadores (Roster + Médias) ===
-print("\nCriando merge  das estatísticas dos jogadores (roster + médias)...")
+# === 5 - Merge das estatísticas dos Jogadores (Roster + Médias + Totais) ===
+print("\nCriando merge das estatísticas dos jogadores (roster + médias + totais)...")
 
-if "id-jogador" in roster_clean.columns and "id-jogador" in players_media_clean.columns:
-    merged = pd.merge(roster_clean, players_media_clean, on="id-jogador", how="left")
+if "id-jogador" in roster_clean.columns:
+
+    # --- Médias ---
+    players_media_ren = players_media_clean.copy()
+    players_media_ren = players_media_ren.add_suffix("_media")
+    players_media_ren.rename(columns={"id-jogador_media": "id-jogador"}, inplace=True)
+
+    # --- Totais ---
+    players_total_ren = players_total_clean.copy()
+    players_total_ren = players_total_ren.add_suffix("_total")
+    players_total_ren.rename(columns={"id-jogador_total": "id-jogador"}, inplace=True)
+
+    # --- Merge principal: Roster + Médias + Totais ---
+    merged = roster_clean.copy()
+    merged = pd.merge(merged, players_media_ren, on="id-jogador", how="left")
+    merged = pd.merge(merged, players_total_ren, on="id-jogador", how="left")
     merged.fillna(0, inplace=True)
 
-    # Eficiência simples: pontos por tentativa de arremesso
-    merged["eficiencia-simples"] = (
-        merged["pontos"] / merged["arremessos-tentados"]
-    ).replace([float("inf"), -float("inf")], 0)
+    # --- Criar coluna de eficiência simples (pontos por arremesso) ---
+    if "pontos_media" in merged.columns and "arremessos-tentados_media" in merged.columns:
+        merged["eficiencia-simples"] = (
+            merged["pontos_media"] / merged["arremessos-tentados_media"]
+        ).replace([float("inf"), -float("inf")], 0)
+    else:
+        merged["eficiencia-simples"] = 0
 
+    # --- Salvar arquivo final ---
     merged.drop(columns=["id-jogador"], inplace=True)
-    # Já está "processado" e finalizado:
     merged.to_csv(PROCESSED_DIR / "dallas_players_2024-25.csv", index=False)
-    print(f"Merge salvo: dal-players-merged.csv ({len(merged)} linhas)")
-else:
-    print("Coluna 'id-jogador' ausente em um dos arquivos. Merge ignorado.")
+    print(f"Merge completo salvo: dallas_players_2024-25.csv ({len(merged)} linhas)")
 
-print("\nProcessamento completo! Todos os arquivos estão em data/processed/")
+else:
+    print("Coluna 'id-jogador' ausente no arquivo roster. Merge ignorado.")
