@@ -1,0 +1,33 @@
+{
+    "nome_do_modelo": "Probabilidade_Vitoria",
+    "variavel_dependente": "resultado",
+    "R_squared": 0.3563,
+    "Adj_R_squared": 0.0,
+    "F_Prob": 2.1e-09,
+    "equacao_coeficientes": [
+        {
+            "variavel": "Intercept",
+            "coeficiente": -16.8054,
+            "p_valor": 0.0,
+            "significativo": true
+        },
+        {
+            "variavel": "porcentagem_triplos",
+            "coeficiente": 21.5743,
+            "p_valor": 0.0001,
+            "significativo": true
+        },
+        {
+            "variavel": "rebotes_totais",
+            "coeficiente": 0.1959,
+            "p_valor": 0.0002,
+            "significativo": true
+        },
+        {
+            "variavel": "mando_de_jogo",
+            "coeficiente": 0.7212,
+            "p_valor": 0.2104,
+            "significativo": false
+        }
+    ]
+}
