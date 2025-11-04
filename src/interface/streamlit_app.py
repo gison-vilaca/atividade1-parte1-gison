@@ -95,28 +95,21 @@ def load_data():
 def add_player_names(processed_df, original_df):
     """Verifica e adiciona os nomes dos jogadores aos dados processados"""
     try:
-        # Se a coluna 'nome-jogador' já existe e tem nomes válidos, retorna o DataFrame original
         if 'nome-jogador' in processed_df.columns:
-            # Verificar se há nomes válidos (não vazios e não genéricos)
             valid_names = processed_df['nome-jogador'].notna() & (processed_df['nome-jogador'] != "")
 
-            # Se a maioria dos nomes é válida, retorna o DataFrame como está
             if valid_names.sum() > len(processed_df) * 0.5:
                 return processed_df
 
-        # Se não houver nomes válidos, tenta fazer o matching
         processed_with_names = processed_df.copy()
 
-        # Garantir que a coluna existe
         if 'nome-jogador' not in processed_with_names.columns:
             processed_with_names['nome-jogador'] = ""
 
         for idx, row in processed_df.iterrows():
-            # Se já tem um nome válido, pula
             if pd.notna(row.get('nome-jogador')) and row.get('nome-jogador', '').strip() != "":
                 continue
 
-            # Tenta fazer matching usando diferentes critérios
             matching_player = original_df[
                 (abs(original_df['AGE'] - row['idade']) <= 1) &
                 (abs(original_df['GP'] - row['jogos-disputados_total']) <= 2) &
@@ -127,7 +120,6 @@ def add_player_names(processed_df, original_df):
             if len(matching_player) >= 1:
                 processed_with_names.at[idx, 'nome-jogador'] = matching_player.iloc[0]['PLAYER_NAME']
             else:
-                # Tenta um matching mais flexível
                 matching_player = original_df[
                     (abs(original_df['AGE'] - row['idade']) <= 2) &
                     (abs(original_df['GP'] - row['jogos-disputados_total']) <= 5)
@@ -136,7 +128,6 @@ def add_player_names(processed_df, original_df):
                 if len(matching_player) >= 1:
                     processed_with_names.at[idx, 'nome-jogador'] = matching_player.iloc[0]['PLAYER_NAME']
                 else:
-                    # Se ainda não encontrou, usa um nome genérico baseado na posição
                     position_name = {1: 'Guard', 2: 'Forward', 3: 'Center', 4: 'Forward-Center', 5: 'Center-Forward'}
                     pos = position_name.get(row.get('posicao-g-f-fc-cf-c', 0), 'Player')
                     processed_with_names.at[idx, 'nome-jogador'] = f"{pos} #{idx+1}"
@@ -144,7 +135,6 @@ def add_player_names(processed_df, original_df):
         return processed_with_names
     except Exception as e:
         st.warning(f"Não foi possível processar nomes dos jogadores: {e}")
-        # Se já tinha nomes, mantém; senão, cria genéricos
         if 'nome-jogador' not in processed_df.columns:
             processed_df['nome-jogador'] = [f"Jogador #{i+1}" for i in range(len(processed_df))]
         return processed_df
@@ -673,7 +663,6 @@ def linear_regression_analysis(players_df, games_df):
         ])
         
         with tab1:
-            # Diagrama de dispersão com linha de regressão (usando primeira variável)
             if len(selected_features) > 0:
                 first_feature = selected_features[0]
                 
@@ -690,7 +679,6 @@ def linear_regression_analysis(players_df, games_df):
                 st.plotly_chart(fig, use_container_width=True)
         
         with tab2:
-            # Gráfico Predição vs Realidade
             pred_real_df = pd.DataFrame({
                 'Real': np.concatenate([y_train, y_test]),
                 'Predito': np.concatenate([y_pred_train, y_pred_test]),
@@ -706,7 +694,6 @@ def linear_regression_analysis(players_df, games_df):
                 color_discrete_map={'Treino': 'blue', 'Teste': 'red'}
             )
             
-            # Linha diagonal perfeita
             min_val = min(pred_real_df['Real'].min(), pred_real_df['Predito'].min())
             max_val = max(pred_real_df['Real'].max(), pred_real_df['Predito'].max())
             
@@ -722,7 +709,6 @@ def linear_regression_analysis(players_df, games_df):
             st.plotly_chart(fig, use_container_width=True)
         
         with tab3:
-            # Análise de resíduos
             residuals_train = y_train - y_pred_train
             residuals_test = y_test - y_pred_test
             
@@ -747,7 +733,6 @@ def linear_regression_analysis(players_df, games_df):
             st.plotly_chart(fig, use_container_width=True)
         
         with tab4:
-            # Importância das variáveis (baseada nos coeficientes absolutos)
             importance_df = pd.DataFrame({
                 'Variável': [feature_options.get(f, f) for f in selected_features],
                 'Importância': np.abs(model.coef_)
@@ -1341,13 +1326,17 @@ def notebook_regression_analysis(games_df):
     st.header("📈 Análise de Regressão Linear - Equação 1")
     st.markdown("**Baseado no notebook linear_regression_att.ipynb**")
 
+    if 'notebook_model' in st.session_state:
+        st.success("✅ Modelo treinado encontrado na sessão!")
+    else:
+        st.info("ℹ️ Nenhum modelo treinado encontrado. Treine um modelo abaixo.")
+
     if not SKLEARN_AVAILABLE:
         st.error("⚠️ Scikit-learn não está instalado. Instale com: pip install scikit-learn")
         return
 
     st.markdown("---")
 
-    # Exibir a Equação 1
     st.subheader("📐 Equação 1: Modelo de Regressão Linear Múltipla")
     st.latex(r"y = a + b \cdot x")
     st.latex(r"y = \beta_0 + \beta_1x + \varepsilon")
@@ -1364,16 +1353,13 @@ def notebook_regression_analysis(games_df):
 
     st.markdown("---")
 
-    # Configuração da análise
     col1, col2 = st.columns([1, 1])
 
     with col1:
         st.subheader("⚙️ Configuração do Modelo")
 
-        # Selecionar variável dependente
         numeric_cols = games_df.select_dtypes(include=[np.number]).columns.tolist()
 
-        # Excluir colunas que não fazem sentido
         exclude_cols = ['data-jogo']
         available_columns = [col for col in numeric_cols if col not in exclude_cols]
 
@@ -1381,24 +1367,21 @@ def notebook_regression_analysis(games_df):
             "🎯 Variável Dependente (y) - O que queremos prever:",
             options=available_columns,
             index=available_columns.index('pontos') if 'pontos' in available_columns else 0,
-            help="Esta é a variável que o modelo tentará prever"
+            help="Esta é a variável que o modelo tentará prever",
+            key="notebook_target_var"
         )
 
-        # Atualizar features disponíveis (remover target e variáveis com data leakage)
         available_features = [col for col in available_columns if col != target_variable]
 
-        # Remover variáveis que podem causar data leakage
         if target_variable == 'pontos':
             leakage_vars = ['saldo-pontos', 'resultado']
             available_features = [col for col in available_features if col not in leakage_vars]
 
-        # Opção de usar todas as variáveis
-        use_all = st.checkbox("Usar todas as variáveis disponíveis", value=False)
+        use_all = st.checkbox("Usar todas as variáveis disponíveis", value=False, key="notebook_use_all")
 
         if use_all:
             selected_features = available_features
         else:
-            # Sugestão padrão baseada no notebook
             default_features = [
                 'arremessos-convertidos',
                 'porcentagem-arremessos',
@@ -1411,7 +1394,8 @@ def notebook_regression_analysis(games_df):
                 "📊 Variáveis Independentes (x₁, x₂, ..., xₙ) - Fatores que influenciam:",
                 options=available_features,
                 default=default_features,
-                help="Estas são as variáveis que o modelo usará para fazer a previsão"
+                help="Estas são as variáveis que o modelo usará para fazer a previsão",
+                key="notebook_features"
             )
 
         test_size = st.slider(
@@ -1420,7 +1404,8 @@ def notebook_regression_analysis(games_df):
             max_value=40,
             value=20,
             step=5,
-            help="Porcentagem dos dados reservada para validar o modelo"
+            help="Porcentagem dos dados reservada para validar o modelo",
+            key="notebook_test_size"
         )
 
         random_state = st.number_input(
@@ -1428,7 +1413,8 @@ def notebook_regression_analysis(games_df):
             min_value=0,
             max_value=100,
             value=42,
-            help="Garante que os resultados sejam reproduzíveis"
+            help="Garante que os resultados sejam reproduzíveis",
+            key="notebook_random_state"
         )
 
     with col2:
@@ -1440,36 +1426,40 @@ def notebook_regression_analysis(games_df):
 
         if selected_features:
             st.write("**Features Selecionadas:**")
-            for i, feature in enumerate(selected_features, 1):
-                st.write(f"{i}. {feature}")
+            
+            with st.expander(f"Ver todas as {len(selected_features)} variáveis selecionadas"):
+                col_a, col_b = st.columns(2)
+                
+                for i, feature in enumerate(selected_features):
+                    col_idx = i % 2
+                    feature_num = i + 1
+                    
+                    if col_idx == 0:
+                        col_a.write(f"{feature_num}. {feature}")
+                    else:
+                        col_b.write(f"{feature_num}. {feature}")
 
     if not selected_features or len(selected_features) == 0:
         st.warning("⚠️ Por favor, selecione pelo menos uma variável independente para treinar o modelo.")
         return
 
-    # Treinar modelo
     st.markdown("---")
 
-    if st.button("🚀 Treinar Modelo de Regressão Linear", type="primary", use_container_width=True):
+    if st.button("🚀 Treinar Modelo de Regressão Linear", type="primary", use_container_width=True, key="notebook_train_button"):
         with st.spinner("Treinando modelo..."):
-            # Preparar dados
             X = games_df[selected_features]
             y = games_df[target_variable]
 
-            # Dividir em treino e teste
             X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=test_size/100, random_state=random_state
             )
 
-            # Treinar modelo
             model = LinearRegression()
             model.fit(X_train, y_train)
 
-            # Fazer previsões
             y_pred_train = model.predict(X_train)
             y_pred_test = model.predict(X_test)
 
-            # Calcular métricas
             r2_train = r2_score(y_train, y_pred_train)
             r2_test = r2_score(y_test, y_pred_test)
             mse_train = mean_squared_error(y_train, y_pred_train)
@@ -1477,7 +1467,6 @@ def notebook_regression_analysis(games_df):
             rmse_train = np.sqrt(mse_train)
             rmse_test = np.sqrt(mse_test)
 
-            # Salvar no session state
             st.session_state['notebook_model'] = {
                 'model': model,
                 'X_train': X_train,
@@ -1498,15 +1487,23 @@ def notebook_regression_analysis(games_df):
 
             st.success("✅ Modelo treinado com sucesso!")
 
-    # Mostrar resultados se o modelo foi treinado
     if 'notebook_model' in st.session_state:
         model_data = st.session_state['notebook_model']
+        
+        required_keys = ['model', 'features', 'target', 'r2_train', 'r2_test', 'rmse_train', 'rmse_test']
+        missing_keys = [key for key in required_keys if key not in model_data]
+        
+        if missing_keys:
+            st.error(f"❌ Dados do modelo incompletos. Chaves faltando: {missing_keys}")
+            st.warning("Por favor, treine o modelo novamente.")
+            del st.session_state['notebook_model']
+            return
+            
         model = model_data['model']
 
         st.markdown("---")
         st.header("📊 Resultados do Modelo")
 
-        # Tabs para organizar os resultados
         tab1, tab2, tab3, tab4 = st.tabs([
             "📐 Equação e Coeficientes",
             "📈 Métricas de Desempenho",
@@ -1517,19 +1514,62 @@ def notebook_regression_analysis(games_df):
         with tab1:
             st.subheader("📐 Equação de Regressão Treinada")
 
-            # Montar equação em LaTeX
             intercept = model.intercept_
             coefficients = model.coef_
 
-            equation_str = f"{model_data['target']} = {intercept:.4f}"
+            equation_html = f"""
+            <div class="equation-container">
+                <span class="equation-part"><strong>{model_data['target']}</strong></span>
+            """
+            
+            if intercept >= 0:
+                equation_html += f'<span class="equation-part">= {intercept:.4f}</span>'
+            else:
+                equation_html += f'<span class="equation-part">= {intercept:.4f}</span>'
+            
             for i, (coef, feature) in enumerate(zip(coefficients, model_data['features'])):
                 sign = "+" if coef >= 0 else ""
-                equation_str += f" {sign} {coef:.4f} \\times \\text{{{feature}}}"
-            equation_str += " + \\varepsilon"
+                term_html = f'<span class="equation-part">{sign} {coef:.4f} × {feature}</span>'
+                equation_html += term_html
+            
+            equation_html += '<span class="equation-part">+ ε</span></div>'
+            
+            equation_css = """
+            <style>
+            .equation-container {
+                font-family: 'Computer Modern', 'Latin Modern Math', 'Times New Roman', serif;
+                font-size: 1.2em;
+                line-height: 1.8;
+                padding: 1rem;
+                margin: 1rem 0;
+                text-align: center;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+            }
+            .equation-part {
+                display: inline-block;
+                margin: 0.2rem 0.4rem;
+                padding: 0.1rem 0.2rem;
+                white-space: nowrap;
+            }
+            .equation-part:first-child {
+                font-weight: bold;
+            }
+            @media (max-width: 768px) {
+                .equation-container {
+                    font-size: 1rem;
+                    padding: 0.8rem;
+                }
+                .equation-part {
+                    margin: 0.1rem 0.2rem;
+                }
+            }
+            </style>
+            """
+            
+            st.markdown(equation_css, unsafe_allow_html=True)
+            st.markdown(equation_html, unsafe_allow_html=True)
 
-            st.latex(equation_str)
-
-            # Mostrar intercepto
             st.markdown("---")
             st.subheader("📍 Intercepto (β₀)")
 
@@ -1539,11 +1579,9 @@ def notebook_regression_analysis(games_df):
             with col2:
                 st.info(f"**Interpretação:** Quando todas as variáveis independentes são zero, o valor previsto de {model_data['target']} é {intercept:.4f}.")
 
-            # Mostrar coeficientes
             st.markdown("---")
             st.subheader("📊 Coeficientes (β₁, β₂, ..., βₙ) e Seus Impactos")
 
-            # Criar DataFrame com coeficientes
             coef_df = pd.DataFrame({
                 'Variável (xᵢ)': model_data['features'],
                 'Coeficiente (βᵢ)': coefficients,
@@ -1569,7 +1607,6 @@ def notebook_regression_analysis(games_df):
                     st.write(f"- **{feature}** (β = {coef:.6f}): A cada aumento de **1 unidade** em {feature}, "
                             f"{model_data['target']} **diminui** em **{abs(coef):.4f} unidades** (mantendo as demais variáveis constantes)")
 
-            # Gráfico de importância
             st.markdown("---")
             st.subheader("📊 Importância Relativa das Variáveis")
 
@@ -1600,7 +1637,6 @@ def notebook_regression_analysis(games_df):
         with tab2:
             st.subheader("📈 Métricas de Desempenho do Modelo")
 
-            # Métricas principais
             col1, col2, col3, col4 = st.columns(4)
 
             with col1:
@@ -1631,7 +1667,6 @@ def notebook_regression_analysis(games_df):
                     help="Raiz do Erro Quadrático Médio (Teste)"
                 )
 
-            # Interpretação do R²
             st.markdown("---")
             st.subheader("📖 Interpretação do R² (Coeficiente de Determinação)")
 
@@ -1650,7 +1685,6 @@ def notebook_regression_analysis(games_df):
                 st.error(f"❌ **Baixo.** O modelo explica apenas **{r2_pct:.2f}%** da variação em {model_data['target']}. "
                         f"O modelo precisa de melhorias significativas.")
 
-            # Informações adicionais
             st.markdown("---")
             st.subheader("📊 Informações da Divisão dos Dados")
 
@@ -1666,17 +1700,14 @@ def notebook_regression_analysis(games_df):
 
             st.markdown("---")
 
-            # Criar inputs para cada feature
             input_values = {}
 
-            # Organizar em colunas
             num_cols = min(3, len(model_data['features']))
             cols = st.columns(num_cols)
 
             for idx, feature in enumerate(model_data['features']):
                 col_idx = idx % num_cols
                 with cols[col_idx]:
-                    # Obter estatísticas da feature
                     min_val = float(games_df[feature].min())
                     max_val = float(games_df[feature].max())
                     mean_val = float(games_df[feature].mean())
@@ -1692,37 +1723,68 @@ def notebook_regression_analysis(games_df):
                         key=f"notebook_pred_{feature}"
                     )
 
-            # Botão para fazer previsão
-            if st.button("🎯 Calcular Previsão", type="primary", use_container_width=True):
-                # Preparar dados para previsão
+            if st.button("🎯 Calcular Previsão", type="primary", use_container_width=True, key="notebook_predict_button"):
                 input_df = pd.DataFrame([input_values])
 
-                # Fazer previsão
                 prediction = model.predict(input_df)[0]
 
-                # Mostrar resultado
                 st.markdown("---")
                 st.subheader("📊 Resultado da Previsão")
 
-                # Destacar a previsão
                 st.success(f"### 🎯 Valor Previsto de {model_data['target']}: **{prediction:.2f}**")
 
-                # Mostrar cálculo detalhado
                 st.markdown("---")
                 st.subheader("🧮 Cálculo Detalhado (Equação 1)")
 
-                # Montar a equação com os valores
-                calc_str = f"{model_data['target']} = {model.intercept_:.4f}"
-
+                calc_html = f"""
+                <div class="calculation-container">
+                    <span class="calc-part"><strong>{model_data['target']}</strong></span>
+                """
+                
+                if model.intercept_ >= 0:
+                    calc_html += f'<span class="calc-part">= {model.intercept_:.4f}</span>'
+                else:
+                    calc_html += f'<span class="calc-part">= {model.intercept_:.4f}</span>'
+                
                 for feature, coef in zip(model_data['features'], model.coef_):
                     value = input_values[feature]
-                    contribution = coef * value
                     sign = "+" if coef >= 0 else ""
-                    calc_str += f" {sign} ({coef:.4f} × {value:.4f})"
+                    term_html = f'<span class="calc-part">{sign} ({coef:.4f} × {value:.4f})</span>'
+                    calc_html += term_html
+                
+                calc_html += f'<br><span class="calc-result">= {prediction:.4f}</span></div>'
+                
+                calc_css = """
+                <style>
+                .calculation-container {
+                    font-family: 'Courier New', monospace;
+                    font-size: 1.1em;
+                    line-height: 1.8;
+                    padding: 1rem;
+                    margin: 1rem 0;
+                    text-align: center;
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                }
+                .calc-part {
+                    display: inline-block;
+                    margin: 0.2rem 0.3rem;
+                    padding: 0.1rem 0.2rem;
+                    white-space: nowrap;
+                }
+                .calc-result {
+                    font-weight: bold;
+                    font-size: 1.1em;
+                    margin-top: 0.5rem;
+                    display: inline-block;
+                    padding: 0.2rem 0.3rem;
+                }
+                </style>
+                """
+                
+                st.markdown(calc_css, unsafe_allow_html=True)
+                st.markdown(calc_html, unsafe_allow_html=True)
 
-                st.code(calc_str, language="python")
-
-                # Calcular contribuições
                 st.markdown("---")
                 st.subheader("📊 Contribuição de Cada Variável")
 
@@ -1735,10 +1797,9 @@ def notebook_regression_analysis(games_df):
                         'Valor Inserido (x)': value,
                         'Coeficiente (β)': coef,
                         'Contribuição (β × x)': contribution,
-                        'Porcentagem do Total': 0  # Calcular depois
+                        'Porcentagem do Total': 0 
                     })
 
-                # Adicionar intercepto
                 intercepto_row = {
                     'Variável': 'Intercepto (β₀)',
                     'Valor Inserido (x)': 1.0,
@@ -1749,7 +1810,6 @@ def notebook_regression_analysis(games_df):
 
                 contrib_df = pd.DataFrame([intercepto_row] + contributions)
 
-                # Calcular porcentagem (só para valores positivos)
                 total_positive = contrib_df[contrib_df['Contribuição (β × x)'] > 0]['Contribuição (β × x)'].sum()
                 if total_positive > 0:
                     contrib_df['Porcentagem do Total'] = (contrib_df['Contribuição (β × x)'] / total_positive * 100).clip(lower=0)
@@ -1761,11 +1821,9 @@ def notebook_regression_analysis(games_df):
                     'Porcentagem do Total': '{:.2f}%'
                 }), use_container_width=True, hide_index=True)
 
-                # Soma total
                 total_contribution = model.intercept_ + sum([c['Contribuição (β × x)'] for c in contributions])
                 st.info(f"**✅ Soma Total das Contribuições = {total_contribution:.4f}** ≈ **{prediction:.4f}** (valor previsto)")
 
-                # Gráfico de contribuições
                 st.markdown("---")
                 st.subheader("📊 Visualização das Contribuições")
 
@@ -1795,12 +1853,10 @@ def notebook_regression_analysis(games_df):
         with tab4:
             st.subheader("📊 Visualizações da Regressão")
 
-            # Gráfico 1: Valores Reais vs Preditos
             st.markdown("### 1. Valores Reais vs Valores Preditos")
 
             fig = go.Figure()
 
-            # Dados de treino
             fig.add_trace(go.Scatter(
                 x=model_data['y_train'].values,
                 y=model_data['y_pred_train'],
@@ -1812,7 +1868,6 @@ def notebook_regression_analysis(games_df):
                 hovertemplate='%{text}<extra></extra>'
             ))
 
-            # Dados de teste
             fig.add_trace(go.Scatter(
                 x=model_data['y_test'].values,
                 y=model_data['y_pred_test'],
@@ -1824,7 +1879,6 @@ def notebook_regression_analysis(games_df):
                 hovertemplate='%{text}<extra></extra>'
             ))
 
-            # Linha diagonal perfeita
             all_values = np.concatenate([model_data['y_train'].values, model_data['y_test'].values,
                                          model_data['y_pred_train'], model_data['y_pred_test']])
             min_val = all_values.min()
@@ -1848,7 +1902,6 @@ def notebook_regression_analysis(games_df):
             st.plotly_chart(fig, use_container_width=True)
             st.caption("📌 Quanto mais próximos da linha verde (diagonal perfeita), melhor é a predição do modelo.")
 
-            # Gráfico 2: Análise de Resíduos
             st.markdown("---")
             st.markdown("### 2. Análise de Resíduos")
 
@@ -1873,7 +1926,6 @@ def notebook_regression_analysis(games_df):
                 marker=dict(color='red', size=10, opacity=0.8)
             ))
 
-            # Linha zero
             fig2.add_hline(y=0, line_dash="dash", line_color="green", line_width=2)
 
             fig2.update_layout(
@@ -1885,28 +1937,23 @@ def notebook_regression_analysis(games_df):
             st.plotly_chart(fig2, use_container_width=True)
             st.caption("📌 Os resíduos devem estar distribuídos aleatoriamente em torno de zero. Padrões podem indicar problemas no modelo.")
 
-            # Gráfico 3: Linha de Regressão (para primeira variável)
             if len(model_data['features']) > 0:
                 st.markdown("---")
                 st.markdown(f"### 3. Linha de Regressão Ajustada - {model_data['features'][0]}")
 
                 first_feature = model_data['features'][0]
 
-                # Criar dados para a linha de regressão
                 X_simple = games_df[[first_feature]]
                 y_simple = games_df[model_data['target']]
 
-                # Treinar modelo simples para visualização
                 simple_model = LinearRegression()
                 simple_model.fit(X_simple, y_simple)
 
-                # Criar linha de regressão
                 x_range = np.linspace(X_simple.min(), X_simple.max(), 100).reshape(-1, 1)
                 y_range = simple_model.predict(x_range)
 
                 fig3 = go.Figure()
 
-                # Pontos reais
                 fig3.add_trace(go.Scatter(
                     x=games_df[first_feature],
                     y=games_df[model_data['target']],
@@ -1915,7 +1962,6 @@ def notebook_regression_analysis(games_df):
                     marker=dict(color='blue', size=8, opacity=0.6)
                 ))
 
-                # Linha de regressão
                 fig3.add_trace(go.Scatter(
                     x=x_range.flatten(),
                     y=y_range,
