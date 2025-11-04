@@ -283,23 +283,46 @@ def game_analysis(games_df):
         
         home_away.index = ['Fora de Casa', 'Em Casa']
         
+        # Converter porcentagem de arremessos para percentual (0-100)
+        home_away['porcentagem-arremessos'] = home_away['porcentagem-arremessos'] * 100
+        
         fig = go.Figure()
         
-        metrics = ['pontos', 'porcentagem-arremessos', 'assistencias']
-        metric_names = ['Pontos Médios', '% Arremessos', 'Assistências']
+        # Adicionar barras para cada métrica
+        fig.add_trace(go.Bar(
+            name='Pontos Médios',
+            x=['Fora de Casa', 'Em Casa'],
+            y=home_away['pontos'],
+            marker_color='blue',
+            text=[f"{val:.1f}" for val in home_away['pontos']],
+            textposition='auto'
+        ))
         
-        for i, (metric, name) in enumerate(zip(metrics, metric_names)):
-            fig.add_trace(go.Bar(
-                name=name,
-                x=['Fora de Casa', 'Em Casa'],
-                y=home_away[metric],
-                yaxis=f'y{i+1}' if i > 0 else 'y'
-            ))
+        fig.add_trace(go.Bar(
+            name='% Arremessos',
+            x=['Fora de Casa', 'Em Casa'],
+            y=home_away['porcentagem-arremessos'],
+            marker_color='green',
+            text=[f"{val:.1f}%" for val in home_away['porcentagem-arremessos']],
+            textposition='auto'
+        ))
+        
+        fig.add_trace(go.Bar(
+            name='Assistências',
+            x=['Fora de Casa', 'Em Casa'],
+            y=home_away['assistencias'],
+            marker_color='orange',
+            text=[f"{val:.1f}" for val in home_away['assistencias']],
+            textposition='auto'
+        ))
         
         fig.update_layout(
             title="Comparação Casa vs Fora",
             barmode='group',
-            height=400
+            height=400,
+            xaxis_title="Local do Jogo",
+            yaxis_title="Valores",
+            showlegend=True
         )
         st.plotly_chart(fig, use_container_width=True)
     
