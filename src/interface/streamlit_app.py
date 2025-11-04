@@ -288,7 +288,6 @@ def game_analysis(games_df):
         
         fig = go.Figure()
         
-        # Adicionar barras para cada métrica
         fig.add_trace(go.Bar(
             name='Pontos Médios',
             x=['Fora de Casa', 'Em Casa'],
@@ -458,6 +457,8 @@ def interactive_analysis(players_df, games_df):
         (players_df['minutos_total'] >= min_minutes) &
         (players_df['posicao-g-f-fc-cf-c'].isin(selected_positions))
     ]
+    
+    st.write("")
     
     col1, col2 = st.columns(2)
     
@@ -1004,7 +1005,10 @@ def logistic_regression_analysis(players_df, games_df):
 def prediction_interface(players_df, games_df):
     """Interface para predições específicas"""
     st.header("🎯 Predições Específicas")
+    st.write("")
+
     st.markdown("**Faça perguntas específicas sobre desempenho de jogadores e do time**")
+    
     
     if not SKLEARN_AVAILABLE:
         st.error("⚠️ Scikit-learn não está instalado. Instale com: pip install scikit-learn")
@@ -1095,19 +1099,32 @@ def player_specific_predictions(players_df):
     with col2:
         st.subheader("📊 Dados do Jogador Selecionado")
         
-        stats_to_show = {
-            'Posição': {1: 'Guard', 2: 'Forward', 3: 'Center', 4: 'Forward-Center', 5: 'Center-Forward'}.get(player_data['posicao-g-f-fc-cf-c'], 'N/A'),
-            'Idade': f"{player_data['idade']} anos",
-            'Jogos': player_data['jogos-disputados_total'],
-            'Minutos/Jogo': f"{player_data['minutos_media']:.1f}",
-            'Pontos/Jogo': f"{player_data['pontos_media']:.1f}",
-            'Rebotes/Jogo': f"{player_data['rebotes-totais_media']:.1f}",
-            'Assistências/Jogo': f"{player_data['assistencias_media']:.1f}",
-            '% Arremessos': f"{player_data['porcentagem-arremessos_media']*100:.1f}%"
-        }
-        
-        for stat_name, stat_value in stats_to_show.items():
-            st.metric(stat_name, stat_value)
+        st.write("**Informações do Jogador:**")
+        player_info_df = pd.DataFrame({
+            'Estatística': [
+                'Nome',
+                'Posição', 
+                'Idade',
+                'Jogos Disputados',
+                'Minutos por Jogo',
+                'Pontos por Jogo',
+                'Rebotes por Jogo',
+                'Assistências por Jogo',
+                '% Arremessos'
+            ],
+            'Valor': [
+                player_data.get('nome-jogador', 'N/A') if pd.notna(player_data.get('nome-jogador')) else 'N/A',
+                {1: 'Guard', 2: 'Forward', 3: 'Center', 4: 'Forward-Center', 5: 'Center-Forward'}.get(player_data['posicao-g-f-fc-cf-c'], 'N/A'),
+                f"{player_data['idade']} anos",
+                f"{player_data['jogos-disputados_total']} jogos",
+                f"{player_data['minutos_media']:.1f} min",
+                f"{player_data['pontos_media']:.1f} pts",
+                f"{player_data['rebotes-totais_media']:.1f} reb",
+                f"{player_data['assistencias_media']:.1f} ast",
+                f"{player_data['porcentagem-arremessos_media']*100:.1f}%"
+            ]
+        })
+        st.dataframe(player_info_df, use_container_width=True)
     
     if st.button("🔮 Fazer Predição", type="primary"):
         make_player_prediction(active_players, selected_player_idx, stat_column, target_value, stat_type)
@@ -1347,7 +1364,9 @@ def make_team_prediction(games_df, stat_column, target_value, stat_type, game_co
 def notebook_regression_analysis(games_df):
     """Análise de Regressão Linear baseada no notebook linear_regression_att.ipynb"""
     st.header("📈 Análise de Regressão Linear - Equação 1")
+    st.write("")
     st.markdown("**Baseado no notebook linear_regression_att.ipynb**")
+
 
     if 'notebook_model' in st.session_state:
         st.success("✅ Modelo treinado encontrado na sessão!")
