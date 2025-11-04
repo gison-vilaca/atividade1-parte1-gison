@@ -12,7 +12,7 @@ from nba_api.stats.endpoints import (
 TEAM_ID = 1610612742  # Dallas Mavericks
 SEASONS = ["2024-25", "2025-26"]
 
-OUTPUT_DIR = (Path(__file__).resolve().parents[2] / "data" / "extract").resolve()
+OUTPUT_DIR = (Path(__file__).resolve().parents[2] / "data" / "original").resolve()
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
