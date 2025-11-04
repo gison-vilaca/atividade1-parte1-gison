@@ -93,31 +93,60 @@ def load_data():
         return None, None
 
 def add_player_names(processed_df, original_df):
-    """Adiciona os nomes dos jogadores aos dados processados"""
+    """Verifica e adiciona os nomes dos jogadores aos dados processados"""
     try:
+        # Se a coluna 'nome-jogador' já existe e tem nomes válidos, retorna o DataFrame original
+        if 'nome-jogador' in processed_df.columns:
+            # Verificar se há nomes válidos (não vazios e não genéricos)
+            valid_names = processed_df['nome-jogador'].notna() & (processed_df['nome-jogador'] != "")
+
+            # Se a maioria dos nomes é válida, retorna o DataFrame como está
+            if valid_names.sum() > len(processed_df) * 0.5:
+                return processed_df
+
+        # Se não houver nomes válidos, tenta fazer o matching
         processed_with_names = processed_df.copy()
-        processed_with_names['nome-jogador'] = ""
-        
+
+        # Garantir que a coluna existe
+        if 'nome-jogador' not in processed_with_names.columns:
+            processed_with_names['nome-jogador'] = ""
+
         for idx, row in processed_df.iterrows():
+            # Se já tem um nome válido, pula
+            if pd.notna(row.get('nome-jogador')) and row.get('nome-jogador', '').strip() != "":
+                continue
+
+            # Tenta fazer matching usando diferentes critérios
             matching_player = original_df[
                 (abs(original_df['AGE'] - row['idade']) <= 1) &
-                (abs(original_df['GP'] - row['jogos-disputados']) <= 2) &
-                (abs(original_df['MIN'] - row['minutos']) <= 2.0) &
-                (abs(original_df['PTS'] - row['pontos']) <= 1.0)
+                (abs(original_df['GP'] - row['jogos-disputados_total']) <= 2) &
+                (abs(original_df['MIN'] - row['minutos_media']) <= 2.0) &
+                (abs(original_df['PTS'] - row['pontos_media']) <= 1.0)
             ]
-            
-            if len(matching_player) == 1:
+
+            if len(matching_player) >= 1:
                 processed_with_names.at[idx, 'nome-jogador'] = matching_player.iloc[0]['PLAYER_NAME']
-            elif len(matching_player) > 1:
-                best_match = matching_player.iloc[0]
-                processed_with_names.at[idx, 'nome-jogador'] = best_match['PLAYER_NAME']
             else:
-                processed_with_names.at[idx, 'nome-jogador'] = f"Jogador #{idx+1}"
-        
+                # Tenta um matching mais flexível
+                matching_player = original_df[
+                    (abs(original_df['AGE'] - row['idade']) <= 2) &
+                    (abs(original_df['GP'] - row['jogos-disputados_total']) <= 5)
+                ]
+
+                if len(matching_player) >= 1:
+                    processed_with_names.at[idx, 'nome-jogador'] = matching_player.iloc[0]['PLAYER_NAME']
+                else:
+                    # Se ainda não encontrou, usa um nome genérico baseado na posição
+                    position_name = {1: 'Guard', 2: 'Forward', 3: 'Center', 4: 'Forward-Center', 5: 'Center-Forward'}
+                    pos = position_name.get(row.get('posicao-g-f-fc-cf-c', 0), 'Player')
+                    processed_with_names.at[idx, 'nome-jogador'] = f"{pos} #{idx+1}"
+
         return processed_with_names
     except Exception as e:
-        st.warning(f"Não foi possível adicionar nomes dos jogadores: {e}")
-        processed_df['nome-jogador'] = [f"Jogador #{i+1}" for i in range(len(processed_df))]
+        st.warning(f"Não foi possível processar nomes dos jogadores: {e}")
+        # Se já tinha nomes, mantém; senão, cria genéricos
+        if 'nome-jogador' not in processed_df.columns:
+            processed_df['nome-jogador'] = [f"Jogador #{i+1}" for i in range(len(processed_df))]
         return processed_df
 
 def create_summary_metrics(players_df, games_df):
@@ -146,24 +175,24 @@ def create_summary_metrics(players_df, games_df):
 
 def player_analysis(players_df):
     st.header("📊 Análise dos Jogadores")
-    
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
         st.subheader("🏆 Top 10 Pontuadores")
-        top_scorers = players_df.nlargest(10, 'pontos')[['nome-jogador', 'posicao-g-f-fc-cf-c', 'pontos', 'jogos-disputados']]
-        top_scorers['pontos_por_jogo'] = top_scorers['pontos'] / top_scorers['jogos-disputados']
-        
+        top_scorers = players_df.nlargest(10, 'pontos_total')[['nome-jogador', 'posicao-g-f-fc-cf-c', 'pontos_total', 'jogos-disputados_total']]
+        top_scorers['pontos_por_jogo'] = top_scorers['pontos_total'] / top_scorers['jogos-disputados_total']
+
         top_scorers_chart = top_scorers.reset_index()
-        
+
         fig = px.bar(
-            top_scorers_chart, 
-            x='pontos', 
+            top_scorers_chart,
+            x='pontos_total',
             y='nome-jogador',
             orientation='h',
             title="Pontos por Jogador",
-            labels={'pontos': 'Pontos Totais', 'nome-jogador': 'Jogadores'},
-            color='pontos',
+            labels={'pontos_total': 'Pontos Totais', 'nome-jogador': 'Jogadores'},
+            color='pontos_total',
             color_continuous_scale='blues'
         )
         fig.update_layout(height=400, showlegend=False)
@@ -171,21 +200,21 @@ def player_analysis(players_df):
     
     with col2:
         st.subheader("🎯 Eficiência de Arremessos")
-        efficiency_df = players_df[players_df['arremessos-tentados'] >= 5].copy()
-        efficiency_df['eficiencia_arremesso'] = efficiency_df['porcentagem-arremessos'] * 100
-        
+        efficiency_df = players_df[players_df['arremessos-tentados_total'] >= 5].copy()
+        efficiency_df['eficiencia_arremesso'] = efficiency_df['porcentagem-arremessos_media'] * 100
+
         fig = px.scatter(
             efficiency_df,
-            x='arremessos-tentados',
+            x='arremessos-tentados_total',
             y='eficiencia_arremesso',
-            size='pontos',
-            color='porcentagem-triplos',
+            size='pontos_total',
+            color='porcentagem-triplos_media',
             hover_name='nome-jogador' if 'nome-jogador' in efficiency_df.columns else None,
             title="Eficiência vs Volume de Arremessos",
             labels={
-                'arremessos-tentados': 'Arremessos Tentados',
+                'arremessos-tentados_total': 'Arremessos Tentados',
                 'eficiencia_arremesso': 'Eficiência (%)',
-                'porcentagem-triplos': '% Triplos'
+                'porcentagem-triplos_media': '% Triplos'
             },
             color_continuous_scale='viridis'
         )
@@ -211,12 +240,12 @@ def player_analysis(players_df):
     
     with col2:
         pos_stats = players_df.groupby('posicao-g-f-fc-cf-c').agg({
-            'pontos': 'mean',
-            'rebotes-totais': 'mean',
-            'assistencias': 'mean',
-            'porcentagem-arremessos': 'mean'
+            'pontos_media': 'mean',
+            'rebotes-totais_media': 'mean',
+            'assistencias_media': 'mean',
+            'porcentagem-arremessos_media': 'mean'
         }).round(2)
-        
+
         st.write("**Médias por Posição:**")
         st.dataframe(pos_stats, use_container_width=True)
 
@@ -311,33 +340,33 @@ def advanced_analysis(players_df, games_df):
     
     with col1:
         st.subheader("⚡ Eficiência vs Uso")
-        
+
         players_df['uso_estimado'] = (
-            players_df['arremessos-tentados'] + 
-            players_df['lances-livres-tentados'] * 0.44 + 
-            players_df['erros']
-        ) / players_df['minutos']
-        
+            players_df['arremessos-tentados_total'] +
+            players_df['lances-livres-tentados_total'] * 0.44 +
+            players_df['erros_total']
+        ) / players_df['minutos_total']
+
         players_df['eficiencia_verdadeira'] = (
-            players_df['pontos'] / 
-            (2 * (players_df['arremessos-tentados'] + 0.44 * players_df['lances-livres-tentados']))
+            players_df['pontos_total'] /
+            (2 * (players_df['arremessos-tentados_total'] + 0.44 * players_df['lances-livres-tentados_total']))
         )
-        
-        regular_players = players_df[players_df['minutos'] >= 10]
+
+        regular_players = players_df[players_df['minutos_total'] >= 100]
         
         fig = px.scatter(
             regular_players,
             x='uso_estimado',
             y='eficiencia_verdadeira',
-            size='minutos',
-            color='pontos',
+            size='minutos_total',
+            color='pontos_total',
             hover_name='nome-jogador' if 'nome-jogador' in regular_players.columns else None,
             title="Eficiência Verdadeira vs Taxa de Uso",
             labels={
                 'uso_estimado': 'Taxa de Uso Estimada',
                 'eficiencia_verdadeira': 'Eficiência Verdadeira',
-                'minutos': 'Minutos',
-                'pontos': 'Pontos'
+                'minutos_total': 'Minutos Totais',
+                'pontos_total': 'Pontos Totais'
             },
             color_continuous_scale='plasma'
         )
@@ -396,11 +425,11 @@ def interactive_analysis(players_df, games_df):
     st.sidebar.header("🎛️ Filtros")
     
     min_minutes = st.sidebar.slider(
-        "Minutos mínimos por jogo",
+        "Minutos mínimos totais",
         min_value=0,
-        max_value=int(players_df['minutos'].max()),
-        value=10,
-        step=5
+        max_value=int(players_df['minutos_total'].max()),
+        value=100,
+        step=50
     )
     
     positions = players_df['posicao-g-f-fc-cf-c'].unique()
@@ -413,7 +442,7 @@ def interactive_analysis(players_df, games_df):
     )
     
     filtered_players = players_df[
-        (players_df['minutos'] >= min_minutes) &
+        (players_df['minutos_total'] >= min_minutes) &
         (players_df['posicao-g-f-fc-cf-c'].isin(selected_positions))
     ]
     
@@ -421,20 +450,20 @@ def interactive_analysis(players_df, games_df):
     
     with col1:
         stat_options = {
-            'pontos': 'Pontos',
-            'rebotes-totais': 'Rebotes',
-            'assistencias': 'Assistências',
-            'porcentagem-arremessos': '% Arremessos',
-            'porcentagem-triplos': '% Triplos',
-            'roubos': 'Roubos',
-            'tocos': 'Tocos'
+            'pontos_media': 'Pontos por Jogo',
+            'rebotes-totais_media': 'Rebotes por Jogo',
+            'assistencias_media': 'Assistências por Jogo',
+            'porcentagem-arremessos_media': '% Arremessos',
+            'porcentagem-triplos_media': '% Triplos',
+            'roubos_media': 'Roubos por Jogo',
+            'tocos_media': 'Tocos por Jogo'
         }
-        
-        x_stat = st.selectbox("Estatística X", options=list(stat_options.keys()), 
+
+        x_stat = st.selectbox("Estatística X", options=list(stat_options.keys()),
                              format_func=lambda x: stat_options[x])
-    
+
     with col2:
-        y_stat = st.selectbox("Estatística Y", options=list(stat_options.keys()), 
+        y_stat = st.selectbox("Estatística Y", options=list(stat_options.keys()),
                              format_func=lambda x: stat_options[x], index=1)
     
     if not filtered_players.empty:
@@ -442,7 +471,7 @@ def interactive_analysis(players_df, games_df):
             filtered_players,
             x=x_stat,
             y=y_stat,
-            size='minutos',
+            size='minutos_total',
             color='posicao-g-f-fc-cf-c',
             hover_name='nome-jogador' if 'nome-jogador' in filtered_players.columns else None,
             title=f"{stat_options[y_stat]} vs {stat_options[x_stat]}",
@@ -451,11 +480,11 @@ def interactive_analysis(players_df, games_df):
         )
         fig.update_layout(height=500)
         st.plotly_chart(fig, use_container_width=True)
-        
+
         st.subheader("📋 Jogadores Selecionados")
-        display_cols = ['nome-jogador', 'posicao-g-f-fc-cf-c', 'idade', 'jogos-disputados', 'minutos', 
-                       'pontos', 'rebotes-totais', 'assistencias', 'porcentagem-arremessos']
-        
+        display_cols = ['nome-jogador', 'posicao-g-f-fc-cf-c', 'idade', 'jogos-disputados_total', 'minutos_media',
+                       'pontos_media', 'rebotes-totais_media', 'assistencias_media', 'porcentagem-arremessos_media']
+
         available_cols = [col for col in display_cols if col in filtered_players.columns]
         st.dataframe(filtered_players[available_cols].round(2), use_container_width=True)
     else:
@@ -502,33 +531,33 @@ def linear_regression_analysis(players_df, games_df):
         
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
         target_options = {
-            'pontos': 'Pontos do Jogador',
-            'rebotes-totais': 'Rebotes do Jogador', 
-            'assistencias': 'Assistências do Jogador',
-            'porcentagem-arremessos': 'Porcentagem de Arremessos',
-            'minutos': 'Minutos Jogados'
+            'pontos_media': 'Pontos por Jogo',
+            'rebotes-totais_media': 'Rebotes por Jogo',
+            'assistencias_media': 'Assistências por Jogo',
+            'porcentagem-arremessos_media': 'Porcentagem de Arremessos',
+            'minutos_media': 'Minutos por Jogo'
         }
-        
+
         target_var = st.selectbox(
             "Variável Dependente (Y) - O que queremos prever:",
             options=[col for col in target_options.keys() if col in numeric_cols],
             format_func=lambda x: target_options.get(x, x),
             help="Esta é a variável que queremos prever"
         )
-        
+
         feature_options = {
-            'jogos-disputados': 'Jogos Disputados',
-            'minutos': 'Minutos por Jogo',
-            'arremessos-tentados': 'Arremessos Tentados',
-            'arremessos-convertidos': 'Arremessos Convertidos',
-            'porcentagem-arremessos': 'Porcentagem de Arremessos',
-            'triplos-tentados': 'Triplos Tentados',
-            'triplos-convertidos': 'Triplos Convertidos',
-            'porcentagem-triplos': 'Porcentagem de Triplos',
-            'lances-livres-tentados': 'Lances Livres Tentados',
-            'lances-livres-convertidos': 'Lances Livres Convertidos',
-            'rebotes-ofensivos': 'Rebotes Ofensivos',
-            'rebotes-defensivos': 'Rebotes Defensivos',
+            'jogos-disputados_total': 'Jogos Disputados',
+            'minutos_media': 'Minutos por Jogo',
+            'arremessos-tentados_media': 'Arremessos Tentados',
+            'arremessos-convertidos_media': 'Arremessos Convertidos',
+            'porcentagem-arremessos_media': 'Porcentagem de Arremessos',
+            'triplos-tentados_media': 'Triplos Tentados',
+            'triplos-convertidos_media': 'Triplos Convertidos',
+            'porcentagem-triplos_media': 'Porcentagem de Triplos',
+            'lances-livres-tentados_media': 'Lances Livres Tentados',
+            'lances-livres-convertidos_media': 'Lances Livres Convertidos',
+            'rebotes-ofensivos_media': 'Rebotes Ofensivos',
+            'rebotes-defensivos_media': 'Rebotes Defensivos',
             'idade': 'Idade',
             'altura-cm': 'Altura (cm)',
             'peso-kg': 'Peso (kg)'
@@ -987,8 +1016,8 @@ def prediction_interface(players_df, games_df):
 def player_specific_predictions(players_df):
     """Predições específicas para jogadores"""
     st.subheader("👤 Predições de Jogadores")
-    
-    active_players = players_df[players_df['jogos-disputados'] >= 5].copy()
+
+    active_players = players_df[players_df['jogos-disputados_total'] >= 5].copy()
     
     if len(active_players) == 0:
         st.warning("Não há jogadores com dados suficientes para predição.")
@@ -1025,7 +1054,7 @@ def player_specific_predictions(players_df):
         )
         
         if stat_type == "Pontos":
-            current_avg = player_data['pontos'] / player_data['jogos-disputados']
+            current_avg = player_data['pontos_media']
             target_value = st.number_input(
                 f"Quantos {stat_type.lower()} o jogador fará?",
                 min_value=0,
@@ -1033,9 +1062,9 @@ def player_specific_predictions(players_df):
                 value=int(current_avg),
                 help=f"Média atual: {current_avg:.1f} por jogo"
             )
-            stat_column = 'pontos'
+            stat_column = 'pontos_media'
         elif stat_type == "Rebotes":
-            current_avg = player_data['rebotes-totais'] / player_data['jogos-disputados']
+            current_avg = player_data['rebotes-totais_media']
             target_value = st.number_input(
                 f"Quantos {stat_type.lower()} o jogador fará?",
                 min_value=0,
@@ -1043,9 +1072,9 @@ def player_specific_predictions(players_df):
                 value=int(current_avg),
                 help=f"Média atual: {current_avg:.1f} por jogo"
             )
-            stat_column = 'rebotes-totais'
-        else:  
-            current_avg = player_data['assistencias'] / player_data['jogos-disputados']
+            stat_column = 'rebotes-totais_media'
+        else:
+            current_avg = player_data['assistencias_media']
             target_value = st.number_input(
                 f"Quantas {stat_type.lower()} o jogador fará?",
                 min_value=0,
@@ -1053,7 +1082,7 @@ def player_specific_predictions(players_df):
                 value=int(current_avg),
                 help=f"Média atual: {current_avg:.1f} por jogo"
             )
-            stat_column = 'assistencias'
+            stat_column = 'assistencias_media'
     
     with col2:
         st.subheader("📊 Dados do Jogador Selecionado")
@@ -1061,12 +1090,12 @@ def player_specific_predictions(players_df):
         stats_to_show = {
             'Posição': {1: 'Guard', 2: 'Forward', 3: 'Center', 4: 'Forward-Center', 5: 'Center-Forward'}.get(player_data['posicao-g-f-fc-cf-c'], 'N/A'),
             'Idade': f"{player_data['idade']} anos",
-            'Jogos': player_data['jogos-disputados'],
-            'Minutos/Jogo': f"{player_data['minutos'] / player_data['jogos-disputados']:.1f}",
-            'Pontos/Jogo': f"{player_data['pontos'] / player_data['jogos-disputados']:.1f}",
-            'Rebotes/Jogo': f"{player_data['rebotes-totais'] / player_data['jogos-disputados']:.1f}",
-            'Assistências/Jogo': f"{player_data['assistencias'] / player_data['jogos-disputados']:.1f}",
-            '% Arremessos': f"{player_data['porcentagem-arremessos']*100:.1f}%"
+            'Jogos': player_data['jogos-disputados_total'],
+            'Minutos/Jogo': f"{player_data['minutos_media']:.1f}",
+            'Pontos/Jogo': f"{player_data['pontos_media']:.1f}",
+            'Rebotes/Jogo': f"{player_data['rebotes-totais_media']:.1f}",
+            'Assistências/Jogo': f"{player_data['assistencias_media']:.1f}",
+            '% Arremessos': f"{player_data['porcentagem-arremessos_media']*100:.1f}%"
         }
         
         for stat_name, stat_value in stats_to_show.items():
@@ -1077,29 +1106,28 @@ def player_specific_predictions(players_df):
 
 def make_player_prediction(players_df, player_idx, stat_column, target_value, stat_type):
     """Faz a predição para um jogador específico"""
-    
+
     feature_columns = [
-        'idade', 'jogos-disputados', 'minutos', 'arremessos-tentados',
-        'porcentagem-arremessos', 'rebotes-totais', 'assistencias'
+        'idade', 'jogos-disputados_total', 'minutos_media', 'arremessos-tentados_media',
+        'porcentagem-arremessos_media', 'rebotes-totais_media', 'assistencias_media'
     ]
-    
+
     available_features = [col for col in feature_columns if col in players_df.columns and col != stat_column]
-    
+
     if len(available_features) < 3:
         st.error("Dados insuficientes para fazer a predição.")
         return
-    
+
     X = players_df[available_features].fillna(0)
     y = players_df[stat_column].fillna(0)
-    
+
     model = LinearRegression()
     model.fit(X, y)
-    
+
     player_features = players_df.loc[player_idx, available_features].values.reshape(1, -1)
-    
-    predicted_total = model.predict(player_features)[0]
-    games_played = players_df.loc[player_idx, 'jogos-disputados']
-    predicted_per_game = predicted_total / games_played if games_played > 0 else 0
+
+    predicted_per_game = model.predict(player_features)[0]
+    games_played = players_df.loc[player_idx, 'jogos-disputados_total']
     
     similar_players = players_df[
         (abs(players_df['idade'] - players_df.loc[player_idx, 'idade']) <= 3) &
@@ -1107,9 +1135,9 @@ def make_player_prediction(players_df, player_idx, stat_column, target_value, st
     ]
     
     if len(similar_players) > 3:
-        similar_avg = similar_players[stat_column].mean() / similar_players['jogos-disputados'].mean()
+        similar_avg = similar_players[stat_column].mean()
         target_per_game = target_value
-        
+
         diff_from_avg = abs(target_per_game - similar_avg)
         probability = max(0, min(100, 100 - (diff_from_avg * 10)))
     else:
@@ -1308,37 +1336,646 @@ def make_team_prediction(games_df, stat_column, target_value, stat_type, game_co
         st.markdown("- 🏥 Possíveis lesões")
         st.markdown("- 🛡️ Qualidade da defesa adversária")
 
+def notebook_regression_analysis(games_df):
+    """Análise de Regressão Linear baseada no notebook linear_regression_att.ipynb"""
+    st.header("📈 Análise de Regressão Linear - Equação 1")
+    st.markdown("**Baseado no notebook linear_regression_att.ipynb**")
+
+    if not SKLEARN_AVAILABLE:
+        st.error("⚠️ Scikit-learn não está instalado. Instale com: pip install scikit-learn")
+        return
+
+    st.markdown("---")
+
+    # Exibir a Equação 1
+    st.subheader("📐 Equação 1: Modelo de Regressão Linear Múltipla")
+    st.latex(r"y = a + b \cdot x")
+    st.latex(r"y = \beta_0 + \beta_1x + \varepsilon")
+    st.latex(r"y = \beta_0 + \beta_1x_1 + \beta_2x_2 + ... + \beta_nx_n + \varepsilon")
+
+    st.info("""
+    **Interpretação da Equação:**
+    - **y**: Variável dependente (o que queremos prever)
+    - **β₀ (beta zero)**: Intercepto (valor base quando todas as variáveis independentes são zero)
+    - **β₁, β₂, ..., βₙ (betas)**: Coeficientes de regressão (quantificam o impacto de cada variável independente)
+    - **x₁, x₂, ..., xₙ**: Variáveis independentes (features que influenciam a predição)
+    - **ε (epsilon)**: Termo de erro (variação não explicada pelo modelo)
+    """)
+
+    st.markdown("---")
+
+    # Configuração da análise
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        st.subheader("⚙️ Configuração do Modelo")
+
+        # Selecionar variável dependente
+        numeric_cols = games_df.select_dtypes(include=[np.number]).columns.tolist()
+
+        # Excluir colunas que não fazem sentido
+        exclude_cols = ['data-jogo']
+        available_columns = [col for col in numeric_cols if col not in exclude_cols]
+
+        target_variable = st.selectbox(
+            "🎯 Variável Dependente (y) - O que queremos prever:",
+            options=available_columns,
+            index=available_columns.index('pontos') if 'pontos' in available_columns else 0,
+            help="Esta é a variável que o modelo tentará prever"
+        )
+
+        # Atualizar features disponíveis (remover target e variáveis com data leakage)
+        available_features = [col for col in available_columns if col != target_variable]
+
+        # Remover variáveis que podem causar data leakage
+        if target_variable == 'pontos':
+            leakage_vars = ['saldo-pontos', 'resultado']
+            available_features = [col for col in available_features if col not in leakage_vars]
+
+        # Opção de usar todas as variáveis
+        use_all = st.checkbox("Usar todas as variáveis disponíveis", value=False)
+
+        if use_all:
+            selected_features = available_features
+        else:
+            # Sugestão padrão baseada no notebook
+            default_features = [
+                'arremessos-convertidos',
+                'porcentagem-arremessos',
+                'triplos-convertidos',
+                'assistencias'
+            ]
+            default_features = [f for f in default_features if f in available_features]
+
+            selected_features = st.multiselect(
+                "📊 Variáveis Independentes (x₁, x₂, ..., xₙ) - Fatores que influenciam:",
+                options=available_features,
+                default=default_features,
+                help="Estas são as variáveis que o modelo usará para fazer a previsão"
+            )
+
+        test_size = st.slider(
+            "Tamanho do conjunto de teste (%)",
+            min_value=10,
+            max_value=40,
+            value=20,
+            step=5,
+            help="Porcentagem dos dados reservada para validar o modelo"
+        )
+
+        random_state = st.number_input(
+            "Random State (reprodutibilidade)",
+            min_value=0,
+            max_value=100,
+            value=42,
+            help="Garante que os resultados sejam reproduzíveis"
+        )
+
+    with col2:
+        st.subheader("📊 Informações do Dataset")
+
+        st.metric("Total de Amostras", len(games_df))
+        st.metric("Variável Dependente", target_variable)
+        st.metric("Número de Features Selecionadas", len(selected_features) if selected_features else 0)
+
+        if selected_features:
+            st.write("**Features Selecionadas:**")
+            for i, feature in enumerate(selected_features, 1):
+                st.write(f"{i}. {feature}")
+
+    if not selected_features or len(selected_features) == 0:
+        st.warning("⚠️ Por favor, selecione pelo menos uma variável independente para treinar o modelo.")
+        return
+
+    # Treinar modelo
+    st.markdown("---")
+
+    if st.button("🚀 Treinar Modelo de Regressão Linear", type="primary", use_container_width=True):
+        with st.spinner("Treinando modelo..."):
+            # Preparar dados
+            X = games_df[selected_features]
+            y = games_df[target_variable]
+
+            # Dividir em treino e teste
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=test_size/100, random_state=random_state
+            )
+
+            # Treinar modelo
+            model = LinearRegression()
+            model.fit(X_train, y_train)
+
+            # Fazer previsões
+            y_pred_train = model.predict(X_train)
+            y_pred_test = model.predict(X_test)
+
+            # Calcular métricas
+            r2_train = r2_score(y_train, y_pred_train)
+            r2_test = r2_score(y_test, y_pred_test)
+            mse_train = mean_squared_error(y_train, y_pred_train)
+            mse_test = mean_squared_error(y_test, y_pred_test)
+            rmse_train = np.sqrt(mse_train)
+            rmse_test = np.sqrt(mse_test)
+
+            # Salvar no session state
+            st.session_state['notebook_model'] = {
+                'model': model,
+                'X_train': X_train,
+                'X_test': X_test,
+                'y_train': y_train,
+                'y_test': y_test,
+                'y_pred_train': y_pred_train,
+                'y_pred_test': y_pred_test,
+                'features': selected_features,
+                'target': target_variable,
+                'r2_train': r2_train,
+                'r2_test': r2_test,
+                'mse_train': mse_train,
+                'mse_test': mse_test,
+                'rmse_train': rmse_train,
+                'rmse_test': rmse_test
+            }
+
+            st.success("✅ Modelo treinado com sucesso!")
+
+    # Mostrar resultados se o modelo foi treinado
+    if 'notebook_model' in st.session_state:
+        model_data = st.session_state['notebook_model']
+        model = model_data['model']
+
+        st.markdown("---")
+        st.header("📊 Resultados do Modelo")
+
+        # Tabs para organizar os resultados
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "📐 Equação e Coeficientes",
+            "📈 Métricas de Desempenho",
+            "🔮 Fazer Previsões",
+            "📊 Visualizações"
+        ])
+
+        with tab1:
+            st.subheader("📐 Equação de Regressão Treinada")
+
+            # Montar equação em LaTeX
+            intercept = model.intercept_
+            coefficients = model.coef_
+
+            equation_str = f"{model_data['target']} = {intercept:.4f}"
+            for i, (coef, feature) in enumerate(zip(coefficients, model_data['features'])):
+                sign = "+" if coef >= 0 else ""
+                equation_str += f" {sign} {coef:.4f} \\times \\text{{{feature}}}"
+            equation_str += " + \\varepsilon"
+
+            st.latex(equation_str)
+
+            # Mostrar intercepto
+            st.markdown("---")
+            st.subheader("📍 Intercepto (β₀)")
+
+            col1, col2 = st.columns([1, 2])
+            with col1:
+                st.metric("Valor do Intercepto (β₀)", f"{intercept:.4f}")
+            with col2:
+                st.info(f"**Interpretação:** Quando todas as variáveis independentes são zero, o valor previsto de {model_data['target']} é {intercept:.4f}.")
+
+            # Mostrar coeficientes
+            st.markdown("---")
+            st.subheader("📊 Coeficientes (β₁, β₂, ..., βₙ) e Seus Impactos")
+
+            # Criar DataFrame com coeficientes
+            coef_df = pd.DataFrame({
+                'Variável (xᵢ)': model_data['features'],
+                'Coeficiente (βᵢ)': coefficients,
+                'Impacto Absoluto': np.abs(coefficients),
+                'Direção': ['Positivo ↗️' if c > 0 else 'Negativo ↘️' for c in coefficients]
+            }).sort_values('Impacto Absoluto', ascending=False)
+
+            st.dataframe(coef_df.style.format({
+                'Coeficiente (βᵢ)': '{:.6f}',
+                'Impacto Absoluto': '{:.6f}'
+            }), use_container_width=True, hide_index=True)
+
+            st.markdown("---")
+            st.subheader("💡 Interpretação dos Coeficientes")
+
+            st.write("**Como quantificar o impacto de cada variável:**")
+
+            for feature, coef in zip(model_data['features'], coefficients):
+                if coef > 0:
+                    st.write(f"- **{feature}** (β = {coef:.6f}): A cada aumento de **1 unidade** em {feature}, "
+                            f"{model_data['target']} **aumenta** em **{coef:.4f} unidades** (mantendo as demais variáveis constantes)")
+                else:
+                    st.write(f"- **{feature}** (β = {coef:.6f}): A cada aumento de **1 unidade** em {feature}, "
+                            f"{model_data['target']} **diminui** em **{abs(coef):.4f} unidades** (mantendo as demais variáveis constantes)")
+
+            # Gráfico de importância
+            st.markdown("---")
+            st.subheader("📊 Importância Relativa das Variáveis")
+
+            fig = go.Figure(go.Bar(
+                y=coef_df['Variável (xᵢ)'],
+                x=coef_df['Impacto Absoluto'],
+                orientation='h',
+                marker=dict(
+                    color=coefficients,
+                    colorscale='RdBu',
+                    showscale=True,
+                    colorbar=dict(title="Coeficiente")
+                ),
+                text=[f"β = {c:.4f}" for c in coefficients],
+                textposition='auto'
+            ))
+
+            fig.update_layout(
+                xaxis_title="Magnitude do Impacto (|β|)",
+                yaxis_title="Variável",
+                height=max(400, len(model_data['features']) * 50),
+                showlegend=False
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption("**Vermelho**: impacto positivo | **Azul**: impacto negativo. Quanto maior a barra, maior o impacto.")
+
+        with tab2:
+            st.subheader("📈 Métricas de Desempenho do Modelo")
+
+            # Métricas principais
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                st.metric(
+                    "R² (Treino)",
+                    f"{model_data['r2_train']:.4f}",
+                    help="Coeficiente de Determinação (Treino) - Proporção da variância explicada"
+                )
+
+            with col2:
+                st.metric(
+                    "R² (Teste)",
+                    f"{model_data['r2_test']:.4f}",
+                    help="Coeficiente de Determinação (Teste) - Indica qualidade da generalização"
+                )
+
+            with col3:
+                st.metric(
+                    "MSE (Teste)",
+                    f"{model_data['mse_test']:.2f}",
+                    help="Erro Quadrático Médio (Teste)"
+                )
+
+            with col4:
+                st.metric(
+                    "RMSE (Teste)",
+                    f"{model_data['rmse_test']:.2f}",
+                    help="Raiz do Erro Quadrático Médio (Teste)"
+                )
+
+            # Interpretação do R²
+            st.markdown("---")
+            st.subheader("📖 Interpretação do R² (Coeficiente de Determinação)")
+
+            r2_pct = model_data['r2_test'] * 100
+
+            if model_data['r2_test'] >= 0.8:
+                st.success(f"✅ **Excelente!** O modelo explica **{r2_pct:.2f}%** da variação em {model_data['target']}. "
+                          f"Isso indica que as variáveis independentes selecionadas têm alta capacidade preditiva.")
+            elif model_data['r2_test'] >= 0.6:
+                st.info(f"ℹ️ **Bom!** O modelo explica **{r2_pct:.2f}%** da variação em {model_data['target']}. "
+                       f"As variáveis independentes têm boa capacidade preditiva.")
+            elif model_data['r2_test'] >= 0.4:
+                st.warning(f"⚠️ **Moderado.** O modelo explica **{r2_pct:.2f}%** da variação em {model_data['target']}. "
+                          f"Considere adicionar mais variáveis ou verificar a qualidade dos dados.")
+            else:
+                st.error(f"❌ **Baixo.** O modelo explica apenas **{r2_pct:.2f}%** da variação em {model_data['target']}. "
+                        f"O modelo precisa de melhorias significativas.")
+
+            # Informações adicionais
+            st.markdown("---")
+            st.subheader("📊 Informações da Divisão dos Dados")
+
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Amostras de Treino", len(model_data['X_train']))
+            col2.metric("Amostras de Teste", len(model_data['X_test']))
+            col3.metric("Total de Amostras", len(model_data['X_train']) + len(model_data['X_test']))
+
+        with tab3:
+            st.subheader("🔮 Fazer Previsões com Novos Valores")
+
+            st.write(f"Insira os valores para as variáveis independentes e o modelo preverá o valor de **{model_data['target']}**.")
+
+            st.markdown("---")
+
+            # Criar inputs para cada feature
+            input_values = {}
+
+            # Organizar em colunas
+            num_cols = min(3, len(model_data['features']))
+            cols = st.columns(num_cols)
+
+            for idx, feature in enumerate(model_data['features']):
+                col_idx = idx % num_cols
+                with cols[col_idx]:
+                    # Obter estatísticas da feature
+                    min_val = float(games_df[feature].min())
+                    max_val = float(games_df[feature].max())
+                    mean_val = float(games_df[feature].mean())
+
+                    input_values[feature] = st.number_input(
+                        f"**{feature}**",
+                        min_value=min_val * 0.5,
+                        max_value=max_val * 1.5,
+                        value=mean_val,
+                        step=(max_val - min_val) / 100,
+                        format="%.4f",
+                        help=f"Média: {mean_val:.2f} | Min: {min_val:.2f} | Max: {max_val:.2f}",
+                        key=f"notebook_pred_{feature}"
+                    )
+
+            # Botão para fazer previsão
+            if st.button("🎯 Calcular Previsão", type="primary", use_container_width=True):
+                # Preparar dados para previsão
+                input_df = pd.DataFrame([input_values])
+
+                # Fazer previsão
+                prediction = model.predict(input_df)[0]
+
+                # Mostrar resultado
+                st.markdown("---")
+                st.subheader("📊 Resultado da Previsão")
+
+                # Destacar a previsão
+                st.success(f"### 🎯 Valor Previsto de {model_data['target']}: **{prediction:.2f}**")
+
+                # Mostrar cálculo detalhado
+                st.markdown("---")
+                st.subheader("🧮 Cálculo Detalhado (Equação 1)")
+
+                # Montar a equação com os valores
+                calc_str = f"{model_data['target']} = {model.intercept_:.4f}"
+
+                for feature, coef in zip(model_data['features'], model.coef_):
+                    value = input_values[feature]
+                    contribution = coef * value
+                    sign = "+" if coef >= 0 else ""
+                    calc_str += f" {sign} ({coef:.4f} × {value:.4f})"
+
+                st.code(calc_str, language="python")
+
+                # Calcular contribuições
+                st.markdown("---")
+                st.subheader("📊 Contribuição de Cada Variável")
+
+                contributions = []
+                for feature, coef in zip(model_data['features'], model.coef_):
+                    value = input_values[feature]
+                    contribution = coef * value
+                    contributions.append({
+                        'Variável': feature,
+                        'Valor Inserido (x)': value,
+                        'Coeficiente (β)': coef,
+                        'Contribuição (β × x)': contribution,
+                        'Porcentagem do Total': 0  # Calcular depois
+                    })
+
+                # Adicionar intercepto
+                intercepto_row = {
+                    'Variável': 'Intercepto (β₀)',
+                    'Valor Inserido (x)': 1.0,
+                    'Coeficiente (β)': model.intercept_,
+                    'Contribuição (β × x)': model.intercept_,
+                    'Porcentagem do Total': 0
+                }
+
+                contrib_df = pd.DataFrame([intercepto_row] + contributions)
+
+                # Calcular porcentagem (só para valores positivos)
+                total_positive = contrib_df[contrib_df['Contribuição (β × x)'] > 0]['Contribuição (β × x)'].sum()
+                if total_positive > 0:
+                    contrib_df['Porcentagem do Total'] = (contrib_df['Contribuição (β × x)'] / total_positive * 100).clip(lower=0)
+
+                st.dataframe(contrib_df.style.format({
+                    'Valor Inserido (x)': '{:.4f}',
+                    'Coeficiente (β)': '{:.6f}',
+                    'Contribuição (β × x)': '{:.4f}',
+                    'Porcentagem do Total': '{:.2f}%'
+                }), use_container_width=True, hide_index=True)
+
+                # Soma total
+                total_contribution = model.intercept_ + sum([c['Contribuição (β × x)'] for c in contributions])
+                st.info(f"**✅ Soma Total das Contribuições = {total_contribution:.4f}** ≈ **{prediction:.4f}** (valor previsto)")
+
+                # Gráfico de contribuições
+                st.markdown("---")
+                st.subheader("📊 Visualização das Contribuições")
+
+                fig = go.Figure(go.Bar(
+                    x=contrib_df['Contribuição (β × x)'],
+                    y=contrib_df['Variável'],
+                    orientation='h',
+                    marker=dict(
+                        color=contrib_df['Contribuição (β × x)'],
+                        colorscale='RdBu',
+                        showscale=True,
+                        colorbar=dict(title="Contribuição")
+                    ),
+                    text=contrib_df['Contribuição (β × x)'].apply(lambda x: f"{x:.2f}"),
+                    textposition='auto'
+                ))
+
+                fig.update_layout(
+                    xaxis_title="Contribuição para a Previsão",
+                    yaxis_title="Variável",
+                    height=max(400, len(model_data['features']) * 50)
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+                st.caption("**Vermelho**: contribuição positiva (aumenta o valor previsto) | **Azul**: contribuição negativa (diminui o valor previsto)")
+
+        with tab4:
+            st.subheader("📊 Visualizações da Regressão")
+
+            # Gráfico 1: Valores Reais vs Preditos
+            st.markdown("### 1. Valores Reais vs Valores Preditos")
+
+            fig = go.Figure()
+
+            # Dados de treino
+            fig.add_trace(go.Scatter(
+                x=model_data['y_train'].values,
+                y=model_data['y_pred_train'],
+                mode='markers',
+                name='Treino',
+                marker=dict(color='blue', size=8, opacity=0.6),
+                text=[f"Real: {r:.2f}<br>Predito: {p:.2f}"
+                      for r, p in zip(model_data['y_train'].values, model_data['y_pred_train'])],
+                hovertemplate='%{text}<extra></extra>'
+            ))
+
+            # Dados de teste
+            fig.add_trace(go.Scatter(
+                x=model_data['y_test'].values,
+                y=model_data['y_pred_test'],
+                mode='markers',
+                name='Teste',
+                marker=dict(color='red', size=10, opacity=0.8),
+                text=[f"Real: {r:.2f}<br>Predito: {p:.2f}"
+                      for r, p in zip(model_data['y_test'].values, model_data['y_pred_test'])],
+                hovertemplate='%{text}<extra></extra>'
+            ))
+
+            # Linha diagonal perfeita
+            all_values = np.concatenate([model_data['y_train'].values, model_data['y_test'].values,
+                                         model_data['y_pred_train'], model_data['y_pred_test']])
+            min_val = all_values.min()
+            max_val = all_values.max()
+
+            fig.add_trace(go.Scatter(
+                x=[min_val, max_val],
+                y=[min_val, max_val],
+                mode='lines',
+                name='Predição Perfeita',
+                line=dict(color='green', dash='dash', width=2)
+            ))
+
+            fig.update_layout(
+                xaxis_title=f"Valores Reais de {model_data['target']}",
+                yaxis_title=f"Valores Preditos de {model_data['target']}",
+                height=500,
+                hovermode='closest'
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption("📌 Quanto mais próximos da linha verde (diagonal perfeita), melhor é a predição do modelo.")
+
+            # Gráfico 2: Análise de Resíduos
+            st.markdown("---")
+            st.markdown("### 2. Análise de Resíduos")
+
+            residuals_train = model_data['y_train'].values - model_data['y_pred_train']
+            residuals_test = model_data['y_test'].values - model_data['y_pred_test']
+
+            fig2 = go.Figure()
+
+            fig2.add_trace(go.Scatter(
+                x=model_data['y_pred_train'],
+                y=residuals_train,
+                mode='markers',
+                name='Treino',
+                marker=dict(color='blue', size=8, opacity=0.6)
+            ))
+
+            fig2.add_trace(go.Scatter(
+                x=model_data['y_pred_test'],
+                y=residuals_test,
+                mode='markers',
+                name='Teste',
+                marker=dict(color='red', size=10, opacity=0.8)
+            ))
+
+            # Linha zero
+            fig2.add_hline(y=0, line_dash="dash", line_color="green", line_width=2)
+
+            fig2.update_layout(
+                xaxis_title=f"Valores Preditos de {model_data['target']}",
+                yaxis_title="Resíduos (Real - Predito)",
+                height=500
+            )
+
+            st.plotly_chart(fig2, use_container_width=True)
+            st.caption("📌 Os resíduos devem estar distribuídos aleatoriamente em torno de zero. Padrões podem indicar problemas no modelo.")
+
+            # Gráfico 3: Linha de Regressão (para primeira variável)
+            if len(model_data['features']) > 0:
+                st.markdown("---")
+                st.markdown(f"### 3. Linha de Regressão Ajustada - {model_data['features'][0]}")
+
+                first_feature = model_data['features'][0]
+
+                # Criar dados para a linha de regressão
+                X_simple = games_df[[first_feature]]
+                y_simple = games_df[model_data['target']]
+
+                # Treinar modelo simples para visualização
+                simple_model = LinearRegression()
+                simple_model.fit(X_simple, y_simple)
+
+                # Criar linha de regressão
+                x_range = np.linspace(X_simple.min(), X_simple.max(), 100).reshape(-1, 1)
+                y_range = simple_model.predict(x_range)
+
+                fig3 = go.Figure()
+
+                # Pontos reais
+                fig3.add_trace(go.Scatter(
+                    x=games_df[first_feature],
+                    y=games_df[model_data['target']],
+                    mode='markers',
+                    name='Dados Reais',
+                    marker=dict(color='blue', size=8, opacity=0.6)
+                ))
+
+                # Linha de regressão
+                fig3.add_trace(go.Scatter(
+                    x=x_range.flatten(),
+                    y=y_range,
+                    mode='lines',
+                    name='Linha de Regressão',
+                    line=dict(color='red', width=3)
+                ))
+
+                fig3.update_layout(
+                    xaxis_title=first_feature,
+                    yaxis_title=model_data['target'],
+                    height=500,
+                    title=f"Melhor Linha Reta Ajustada: {model_data['target']} vs {first_feature}"
+                )
+
+                st.plotly_chart(fig3, use_container_width=True)
+                st.caption(f"📌 A linha vermelha representa a melhor linha reta que se ajusta aos dados (minimiza o erro quadrático).")
+                st.info(f"**Equação da linha:** {model_data['target']} = {simple_model.intercept_:.4f} + {simple_model.coef_[0]:.4f} × {first_feature}")
+
 def main():
     """Função principal da aplicação"""
     st.title("🏀 Dallas Mavericks 2024-25")
     st.markdown("### Análise Exploratória de Dados - Temporada 2024-25")
-    
+
     players_df, games_df = load_data()
-    
+
     if players_df is None or games_df is None:
         st.error("Não foi possível carregar os dados. Verifique se os arquivos estão no local correto.")
         return
-    
+
     create_summary_metrics(players_df, games_df)
-    
+
     st.markdown("---")
-    
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["👥 Jogadores", "🏀 Jogos", "🧠 Análise Avançada", "🔍 Interativa", "🎯 Predições Específicas"])
-    
+
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "👥 Jogadores",
+        "🏀 Jogos",
+        "🧠 Análise Avançada",
+        "🔍 Interativa",
+        "🎯 Predições Específicas",
+        "📈 Regressão Linear"
+    ])
+
     with tab1:
         player_analysis(players_df)
-    
+
     with tab2:
         game_analysis(games_df)
-    
+
     with tab3:
         advanced_analysis(players_df, games_df)
-    
+
     with tab4:
         interactive_analysis(players_df, games_df)
-    
+
     with tab5:
         prediction_interface(players_df, games_df)
+
+    with tab6:
+        notebook_regression_analysis(games_df)
     
     st.markdown("---")
     st.markdown(
